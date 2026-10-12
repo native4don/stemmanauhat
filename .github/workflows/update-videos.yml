@@ -20,10 +20,8 @@ jobs:
       - name: Run update:videos
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-          JM_PASSPHRASE: ${{ secrets.JM_PASSPHRASE }}
-          NAISKUORO_PASSPHRASE: ${{ secrets.NAISKUORO_PASSPHRASE }}
-          PUBLIC_PASSPHRASE: ${{ secrets.PUBLIC_PASSPHRASE }}
-        run: pnpm run update:videos jm naiskuoro public
+          WALLINGFORD_PASSPHRASE: ${{ secrets.WALLINGFORD_PASSPHRASE }}
+        run: pnpm run update:videos wallingford
       - name: Commit and push changes if any
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
