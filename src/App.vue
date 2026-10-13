@@ -12,6 +12,7 @@ import {
   resolveCrop,
   voiceRank,
 } from './crop';
+import { LANGS, isLang, localeOf, messages, type Lang, type MessageKey } from './i18n';
 
 const secretstore = useSecretStore();
 const videostore = useVideoStore();
@@ -25,11 +26,48 @@ const passphraseFromPath = urlParams.get('passphrase') || '';
 
 const storageKey = (suffix: string) => `secret-webpage-${user}-${suffix}`;
 
+/* ---------------- Language (see i18n.ts) ---------------- */
+function readStoredLang(): Lang | null {
+  try {
+    const v = localStorage.getItem(storageKey('lang'));
+    return isLang(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+const urlLang = urlParams.get('lang')?.toLowerCase() ?? null;
+/** Set by the address or by this device's switch; the choir's own default applies only when neither is. */
+const pinnedLang: Lang | null = isLang(urlLang) ? urlLang : readStoredLang();
+const lang = ref<Lang>(pinnedLang ?? 'fi');
+function applyChoirLang(choirLang: unknown) {
+  if (!pinnedLang && isLang(choirLang)) lang.value = choirLang;
+}
+function setLang(l: Lang) {
+  lang.value = l;
+  try {
+    localStorage.setItem(storageKey('lang'), l);
+  } catch {
+    /* ignore */
+  }
+}
+const t = (key: MessageKey) => messages[lang.value][key];
+/** On-screen name of a part: the full-choir part is stored as "Kaikki". */
+const partLabel = (part: string) => (part === 'Kaikki' ? t('all') : part);
+watch(
+  lang,
+  (l) => {
+    document.title = t('pageTitle');
+    document.documentElement.lang = l;
+  },
+  { immediate: true },
+);
+
 if (passphraseFromPath) {
   secretstore.setPassphrase(passphraseFromPath);
   secretstore.decryptData(`${user}.json`).then((decrypted) => {
     decryptedData.value = new TextDecoder().decode(decrypted);
     const dataObj = JSON.parse(decryptedData.value);
+    applyChoirLang(dataObj.lang);
     if (dataObj.videos) {
       videostore.setVideos(dataObj.videos);
       loadCropPresets(dataObj.cropPresets);
@@ -43,7 +81,7 @@ if (passphraseFromPath) {
 }
 const timeString = (isoString: string) => {
   const date = new Date(isoString);
-  return date.toLocaleDateString("fi", {
+  return date.toLocaleDateString(localeOf(lang.value), {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -171,7 +209,7 @@ const filteredVideosByBasename = computed(() => {
       (a, b) => new Date(b[1][0].publishedAt).getTime() - new Date(a[1][0].publishedAt).getTime(),
     );
   } else {
-    entries = entries.slice().sort((a, b) => a[0].localeCompare(b[0], 'fi'));
+    entries = entries.slice().sort((a, b) => a[0].localeCompare(b[0], localeOf(lang.value)));
   }
   const q = searchQuery.value.trim().toLowerCase();
   if (q) entries = entries.filter(([basename]) => basename.toLowerCase().includes(q));
@@ -564,9 +602,9 @@ async function persistPresets() {
     });
     if (!res.ok) throw new Error(await res.text());
     decryptedData.value = JSON.stringify(dataObj);
-    saveStatus.value = 'Tallennettu ✓ (commitoi muutos)';
+    saveStatus.value = t('saved');
   } catch (err) {
-    saveStatus.value = 'Tallennus epäonnistui';
+    saveStatus.value = t('saveFailed');
     console.error('Preset save failed:', err);
   }
 }
@@ -719,7 +757,7 @@ if (user) {
 
 <template>
   <div v-if="!decryptedData">
-    <p>No decrypted data available. Please provide a valid passphrase in the URL.</p>
+    <p>{{ t('noData') }}</p>
   </div>
   <div v-else>
     <div
@@ -732,13 +770,13 @@ if (user) {
         <button
           type="button"
           class="seek-btn"
-          aria-label="Taakse 10 s"
+          :aria-label="t('back10')"
           @click="seekBy(-10)"
         >⟲10</button>
         <button
           type="button"
           class="seek-btn"
-          aria-label="Eteen 10 s"
+          :aria-label="t('forward10')"
           @click="seekBy(10)"
         >10⟳</button>
         <button
@@ -746,7 +784,7 @@ if (user) {
           type="button"
           class="crop-toggle"
           :class="{ active: showCropControls }"
-          aria-label="Rajaa / zoomaa"
+          :aria-label="t('crop')"
           @click="showCropControls = !showCropControls"
         >⛶</button>
       </div>
@@ -772,7 +810,7 @@ if (user) {
           :max="duration || 0"
           step="0.1"
           :value="currentTime"
-          aria-label="Kelaa"
+          :aria-label="t('seek')"
           @input="onSeekInput"
           @change="onSeekCommit"
         />
@@ -780,7 +818,7 @@ if (user) {
       </div>
       <div v-if="!fullScreen && isMobileView" class="crop-zoom-row">
         <label class="crop-slider">
-          <span>Zoom</span>
+          <span>{{ t('zoom') }}</span>
           <input type="range" min="1" max="3" step="0.05" v-model.number="crop.scale" />
         </label>
       </div>
@@ -794,9 +832,9 @@ if (user) {
           <input type="range" min="0" max="100" step="1" v-model.number="crop.originY" />
         </label>
         <div class="crop-buttons">
-          <button type="button" @click="resetCrop">Nollaa</button>
+          <button type="button" @click="resetCrop">{{ t('reset') }}</button>
           <template v-if="isDev">
-            <button type="button" @click="saveCropForSong">Tallenna laululle</button>
+            <button type="button" @click="saveCropForSong">{{ t('saveForSong') }}</button>
           </template>
         </div>
         <span v-if="saveStatus" class="crop-status">{{ saveStatus }}</span>
@@ -814,23 +852,32 @@ if (user) {
       <input
         v-model="searchQuery"
         type="search"
-        placeholder="Hae lauluja..."
-        aria-label="Hae lauluja"
+        :placeholder="t('searchPlaceholder')"
+        :aria-label="t('search')"
         class="search-input"
       />
-      <div class="sort-toggle" role="group" aria-label="Järjestä">
+      <div class="sort-toggle" role="group" :aria-label="t('sort')">
         <button
           type="button"
           :class="{ active: sortMode === 'name' }"
           @click="sortMode = 'name'"
-        >Nimi</button>
+        >{{ t('sortName') }}</button>
         <button
           type="button"
           :class="{ active: sortMode === 'date' }"
           @click="sortMode = 'date'"
-        >Lisätty</button>
+        >{{ t('sortAdded') }}</button>
       </div>
-      <span class="search-count">{{ filteredCount }} / {{ totalCount }} laulua</span>
+      <div class="sort-toggle" role="group" :aria-label="t('language')">
+        <button
+          v-for="l in LANGS"
+          :key="l"
+          type="button"
+          :class="{ active: lang === l }"
+          @click="setLang(l)"
+        >{{ l.toUpperCase() }}</button>
+      </div>
+      <span class="search-count">{{ filteredCount }} / {{ totalCount }} {{ t('songs') }}</span>
     </div>
     <button
       v-if="initialLastPractised && !selectedVideo"
@@ -838,8 +885,8 @@ if (user) {
       class="continue-button"
       @click="restoreLastPractised(initialLastPractised)"
     >
-      Jatka siitä mihin jäit
-      <span class="continue-song">{{ initialLastPractised.basename }} ({{ initialLastPractised.part }})</span>
+      {{ t('continue') }}
+      <span class="continue-song">{{ initialLastPractised.basename }} ({{ partLabel(initialLastPractised.part) }})</span>
     </button>
     <div
       v-for="(videos, basename) in displayedGroups"
@@ -853,14 +900,14 @@ if (user) {
         <span
           v-if="videostore.newestBasenames.has(String(basename)) || isWithinLastWeek(videos[0].publishedAt)"
           class="new-badge"
-        >Uusi</span>
+        >{{ t('new') }}</span>
         <span class="video-group-date">{{ timeString(videos[0].publishedAt) }}</span>
         <button
           v-if="selectedVideo && expandedBasename === basename"
           type="button"
           class="close-song"
-          aria-label="Sulje"
-          title="Sulje"
+          :aria-label="t('close')"
+          :title="t('close')"
           @click.stop="toggleGroup(String(basename))"
         >×</button>
       </header>
@@ -870,7 +917,7 @@ if (user) {
             @click="selectVideo(videos.find(v => v.part === 'Kaikki') as ExtendedVideo)"
             :class="{ 'my-part': isMyPart(preferredVoice, 'Kaikki', videos) }"
           >
-            Kaikki
+            {{ t('all') }}
           </button>
         </div>
         <div class="other-videos">
@@ -892,7 +939,7 @@ if (user) {
         </div>
       </div>
     </div>
-    <p v-if="filteredCount === 0 && totalCount > 0" class="no-results">Ei löydetty lauluja hakusanalla &quot;{{ searchQuery }}&quot;</p>
+    <p v-if="filteredCount === 0 && totalCount > 0" class="no-results">{{ t('noResults') }} &quot;{{ searchQuery }}&quot;</p>
   </div>
 </template>
 
