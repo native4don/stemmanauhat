@@ -154,7 +154,8 @@ export async function updateVideoIds(user: string): Promise<"unchanged" | "updat
   const prev = normalizeVideos(current.videos || []);
   const next = normalizeVideos(latestVideos);
 
-  const changed = prev.length !== next.length || prev.some((v, i) => v.id !== next[i].id);
+  // A video added or removed, or a changed title or staff line, is a change.
+  const changed = JSON.stringify(prev) !== JSON.stringify(next);
   // 4) write back (re-encrypt)
   const updated: PlainData = { ...current, videos: next };
   const payload = encryptPBKDF2(utf8ToBytes(JSON.stringify(updated)));
@@ -186,9 +187,11 @@ if (users.length === 0) {
     if (res === "updated") anyUpdated = true;
   }
   // Exit code 0 either way; workflow will check git diff to decide commit.
+  // Nothing new is not a failure: end normally. A user that failed has
+  // already set process.exitCode = 1 above, so real errors still fail the run.
   if (anyUpdated) {
     console.log("[update-videos] Some users updated.");
   } else {
-    throw new Error("No changes detected");
+    console.log("[update-videos] No changes.");
   }
 })();
