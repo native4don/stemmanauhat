@@ -12,7 +12,7 @@ import {
   resolveCrop,
   voiceRank,
 } from './crop';
-import { LANGS, isLang, localeOf, messages, type Lang, type MessageKey } from './i18n';
+import { LANGS, browserLang, isLang, localeOf, messages, type Lang, type MessageKey } from './i18n';
 
 const secretstore = useSecretStore();
 const videostore = useVideoStore();
@@ -36,8 +36,16 @@ function readStoredLang(): Lang | null {
   }
 }
 const urlLang = urlParams.get('lang')?.toLowerCase() ?? null;
-/** Set by the address or by this device's switch; the choir's own default applies only when neither is. */
-const pinnedLang: Lang | null = isLang(urlLang) ? urlLang : readStoredLang();
+function readBrowserLangs(): readonly string[] {
+  const list = navigator.languages?.length ? navigator.languages : [navigator.language];
+  return list.filter((l): l is string => typeof l === 'string');
+}
+/**
+ * Set by the address, by this device's switch, or by the browser's preferred
+ * languages; the choir's own default applies only when none of them is.
+ */
+const pinnedLang: Lang | null =
+  (isLang(urlLang) ? urlLang : readStoredLang()) ?? browserLang(readBrowserLangs());
 const lang = ref<Lang>(pinnedLang ?? 'fi');
 function applyChoirLang(choirLang: unknown) {
   if (!pinnedLang && isLang(choirLang)) lang.value = choirLang;

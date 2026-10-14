@@ -8,7 +8,8 @@
  * entry to `messages` (the type check refuses a language with a phrase missing).
  *
  * How App.vue picks the language: `?lang=` in the address, else the choice
- * made with the switch on this device, else the choir's own `lang` in its
+ * made with the switch on this device, else the first of the browser's
+ * preferred languages that the page has, else the choir's own `lang` in its
  * entry file, else Finnish.
  */
 export const LANGS = ['en', 'fi'] as const;
@@ -16,6 +17,19 @@ export type Lang = (typeof LANGS)[number];
 
 export function isLang(v: unknown): v is Lang {
   return typeof v === 'string' && (LANGS as readonly string[]).includes(v);
+}
+
+/**
+ * The first of the browser's preferred languages that the page has, by its
+ * main part: 'fi-FI' counts as 'fi', 'en-GB' as 'en' (shown with en-US
+ * conventions). Null if the browser lists none of them.
+ */
+export function browserLang(prefs: readonly string[]): Lang | null {
+  for (const p of prefs) {
+    const base = p.toLowerCase().split('-')[0];
+    if (isLang(base)) return base;
+  }
+  return null;
 }
 
 /** Locale for dates and alphabetical order. Finnish keeps the 'fi' it always used. */
